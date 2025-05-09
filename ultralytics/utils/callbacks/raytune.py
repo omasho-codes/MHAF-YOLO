@@ -1,5 +1,3 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-
 from ultralytics.utils import SETTINGS
 
 try:
@@ -13,13 +11,18 @@ except (ImportError, AssertionError):
 
 
 def on_fit_epoch_end(trainer):
-    """Sends training metrics to Ray Tune at end of each epoch."""
-    if ray.tune.is_session_enabled():
+    
+    # If Ray Tune is available, send metrics
+    if tune:
         metrics = trainer.metrics
         metrics["epoch"] = trainer.epoch
         session.report(metrics)
+    else:
+        # Otherwise, skip or log the metrics locally for Kaggle
+        print(f"Metrics (epoch {trainer.epoch}): {trainer.metrics}")
 
 
+# Define callbacks only if Ray Tune is available
 callbacks = (
     {
         "on_fit_epoch_end": on_fit_epoch_end,
