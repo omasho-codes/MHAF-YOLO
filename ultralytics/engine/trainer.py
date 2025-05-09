@@ -477,17 +477,26 @@ class BaseTrainer:
         self.run_callbacks("teardown")
 
     def save_model(self):
-        """Save model training checkpoints with additional metadata."""
+        """Safely save model training checkpoints with additional metadata."""
         import pandas as pd  # scope for faster startup
 
         metrics = {**self.metrics, **{"fitness": self.fitness}}
-        results = {k.strip(): v for k, v in pd.read_csv(self.csv).to_dict(orient="list").items()}
+
+        # Try loading CSV results; if it fails, skip
+        try:
+            results = {
+                k.strip(): v for k, v in pd.read_csv(self.csv).to_dict(orient="list").items()
+            }
+        except Exception as e:
+            print(f"[Warning] Failed to read results CSV: {e}")
+            results = {}
+
         ckpt = {
             "epoch": self.epoch,
             "best_fitness": self.best_fitness,
             "model": deepcopy(de_parallel(self.model)).half(),
-            "ema": deepcopy(self.ema.ema).half(),
-            "updates": self.ema.updates,
+            "ema": deepcopy(self.ema.ema).half() if self.ema else None,
+            "updates": self.ema.updates if self.ema else 0,
             "optimizer": self.optimizer.state_dict(),
             "train_args": vars(self.args),  # save as dict
             "train_metrics": metrics,
@@ -601,13 +610,33 @@ class BaseTrainer:
         """Plots training labels for YOLO model."""
         pass
 
+
+
+    
+
     def save_metrics(self, metrics):
-        """Saves training metrics to a CSV file."""
+        import csv
+        """Safely save training metrics to a CSV file."""
         keys, vals = list(metrics.keys()), list(metrics.values())
-        n = len(metrics) + 1  # number of cols
-        s = "" if self.csv.exists() else (("%23s," * n % tuple(["epoch"] + keys)).rstrip(",") + "\n")  # header
-        with open(self.csv, "a") as f:
-            f.write(s + ("%23.5g," * n % tuple([self.epoch + 1] + vals)).rstrip(",") + "\n")
+        file_exists = self.csv.exists()
+
+        with open(self.csv, "a", newline="") as f:
+            writer = csv.writer(f)
+
+            # Write header if file is new
+            if not file_exists:
+                writer.writerow(["epoch"] + keys)
+
+            # Write the current epoch metrics
+            writer.writerow([self.epoch + 1] + vals)
+
+    # def save_metrics(self, metrics):
+    #     """Saves training metrics to a CSV file."""
+    #     keys, vals = list(metrics.keys()), list(metrics.values())
+    #     n = len(metrics) + 1  # number of cols
+    #     s = "" if self.csv.exists() else (("%23s," * n % tuple(["epoch"] + keys)).rstrip(",") + "\n")  # header
+    #     with open(self.csv, "a") as f:
+    #         f.write(s + ("%23.5g," * n % tuple([self.epoch + 1] + vals)).rstrip(",") + "\n")
 
     def plot_metrics(self):
         """Plot and display metrics visually."""
